@@ -1,0 +1,33 @@
+# Prerequisites and build artifacts
+build/
+bin/
+lib/
+*.o
+*.a
+*.so
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+
+# Model weights and binaries (store in release assets instead)
+models/*.onnx
+models/*.h5
+models/*.pt
+
+# Third-party dependencies
+third_party/*
+!third_party/.gitkeep
+
+# System logs and runtime dumps
+*.log
+.DS_Store
