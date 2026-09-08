@@ -22,6 +22,7 @@ include_directories(
 # 4. Исполняемый файл
 add_executable(gesture_engine
     src/main.cpp
+    src/classifier.cpp
 )
 
 # 5. Линковка библиотек
