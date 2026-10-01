@@ -21,6 +21,7 @@ env/
 
 # Model weights and binaries (store in release assets instead)
 models/*.onnx
+!models/gesture_model.onnx
 models/*.h5
 models/*.pt
 
