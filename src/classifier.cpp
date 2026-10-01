@@ -1,4 +1,5 @@
 #include "gesture_engine/classifier.hpp"
+#include <opencv2/dnn.hpp>
 #include <fstream>
 #include <stdexcept>
 #include <cstring>
@@ -28,28 +29,32 @@ void GestureClassifier::load_labels(const std::string& labels_path) {
 }
 
 std::vector<float> GestureClassifier::preprocess(const cv::Mat& frame) {
-    cv::Mat resized, rgb, normalized;
+    cv::Mat blob;
     
-    // 1. Ресайз до 128x128
-    cv::resize(frame, resized, cv::Size(input_width_, input_height_));
-    
-    // 2. BGR -> RGB
-    cv::cvtColor(resized, rgb, cv::COLOR_BGR2RGB);
-    
-    // 3. Преобразование в float32 и масштабирование в [0.0, 1.0]
-    rgb.convertTo(normalized, CV_32FC3, 1.0f / 255.0f);
+    // cv::dnn::blobFromImage выполняет:
+    // 1. Ресайз до (input_width_, input_height_) = 128x128
+    // 2. Масштабирование: деление пикселей на 255.0f
+    // 3. swapRB = true: преобразование BGR -> RGB
+    // 4. Переупаковку памяти из HWC в NCHW [1, 3, 128, 128]
+    cv::dnn::blobFromImage(
+        frame,
+        blob,
+        1.0f / 255.0f,
+        cv::Size(input_width_, input_height_),
+        cv::Scalar(0, 0, 0),
+        true,   // swapRB
+        false   // crop
+    );
 
-    // 4. Копирование в буфер NHWC [1, 128, 128, 3]
-    std::vector<float> input_tensor_values(1 * input_height_ * input_width_ * input_channels_);
-    std::memcpy(input_tensor_values.data(), normalized.data, input_tensor_values.size() * sizeof(float));
-
-    return input_tensor_values;
+    // Копируем непрерывный буфер float32 значений в вектор
+    return std::vector<float>(blob.ptr<float>(), blob.ptr<float>() + blob.total());
 }
 
 DetectionResult GestureClassifier::predict(const cv::Mat& frame) {
     std::vector<float> input_tensor_values = preprocess(frame);
 
-    std::vector<int64_t> input_shape = {1, input_height_, input_width_, input_channels_};
+    // Формат PyTorch: NCHW [Batch, Channels, Height, Width] -> [1, 3, 128, 128]
+    std::vector<int64_t> input_shape = {1, input_channels_, input_height_, input_width_};
     
     Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
     Ort::Value input_tensor = Ort::Value::CreateTensor<float>(

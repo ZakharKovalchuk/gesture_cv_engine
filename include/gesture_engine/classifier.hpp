@@ -34,6 +34,6 @@ private:
     const int input_height_ = 128;
     const int input_channels_ = 3;
 
-    std::vector<const char*> input_node_names_ = {"input_tensor"};
-    std::vector<const char*> output_node_names_ = {"Identity:0"};
+    std::vector<const char*> input_node_names_ = {"input"};
+    std::vector<const char*> output_node_names_ = {"output"};
 };
