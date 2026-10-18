@@ -60,6 +60,21 @@ private:
     std::deque<DetectionResult> history_;
 };
 
+// Check standard deviation to filter out flat, featureless backgrounds (e.g. blank walls)
+bool isHandPresent(const cv::Mat& roi, double stddev_thresh = 18.0) {
+    cv::Mat gray;
+    if (roi.channels() == 3) {
+        cv::cvtColor(roi, gray, cv::COLOR_BGR2GRAY);
+    } else {
+        gray = roi;
+    }
+
+    cv::Scalar mean, stddev;
+    cv::meanStdDev(gray, mean, stddev);
+
+    return stddev[0] > stddev_thresh;
+}
+
 // Render reticle brackets and crosshair indicator
 void drawTargetReticle(cv::Mat& frame, const cv::Rect& roi, const cv::Scalar& color, int len = 25, int thickness = 2) {
     int x = roi.x, y = roi.y, w = roi.width, h = roi.height;
@@ -103,7 +118,7 @@ void drawConfidenceBar(cv::Mat& frame, const cv::Rect& roi, float conf, const cv
 
 // Render HUD elements with zero heap allocations for overlays
 void renderHUD(cv::Mat& canvas, const cv::Rect& roi, const std::string& label, float confidence, double fps, double latency_ms, bool is_detected) {
-    // Top banner overlay (blending strictly within ROI)
+    // Top banner overlay
     cv::Rect top_rect(0, 0, canvas.cols, 38);
     cv::Mat top_roi = canvas(top_rect);
     cv::Mat top_bg(top_roi.size(), top_roi.type(), COLOR_BG_DARK);
@@ -167,7 +182,7 @@ int main(int argc, char** argv) {
         GestureClassifier classifier(model_path, labels_path);
         TemporalSmoother smoother(6);
 
-        constexpr float CONFIDENCE_THRESHOLD = 0.70f;
+        constexpr float CONFIDENCE_THRESHOLD = 0.80f;
 
         // Camera device index configurable via CLI argument (default: 0)
         int camera_index = 0;
@@ -223,7 +238,16 @@ int main(int argc, char** argv) {
             }
 
             cv::Mat hand_roi = frame(raw_roi);
-            DetectionResult raw_result = classifier.predict(hand_roi);
+            DetectionResult raw_result;
+
+            // Presence gating: check texture/variance to prevent false positives on flat walls
+            if (isHandPresent(hand_roi, 18.0)) {
+                raw_result = classifier.predict(hand_roi);
+            } else {
+                raw_result.label = "none";
+                raw_result.confidence = 0.0f;
+            }
+
             DetectionResult stable_result = smoother.update(raw_result);
 
             auto current_time = std::chrono::steady_clock::now();
@@ -234,7 +258,7 @@ int main(int argc, char** argv) {
             }
 
             double latency_ms = (fps > 0.0) ? (1000.0 / fps) : 0.0;
-            bool is_detected = (stable_result.confidence >= CONFIDENCE_THRESHOLD);
+            bool is_detected = (stable_result.label != "none" && stable_result.confidence >= CONFIDENCE_THRESHOLD);
 
             cv::Mat canvas(CANVAS_HEIGHT, CANVAS_WIDTH, CV_8UC3, COLOR_BG_DARK);
             frame.copyTo(canvas(cv::Rect(OFFSET_X, 0, frame.cols, frame.rows)));
